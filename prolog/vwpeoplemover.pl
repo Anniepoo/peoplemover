@@ -219,7 +219,6 @@ cp_loc('interstellar', loc{x: 119, y:78.26033, z:329.446259}).
 cp_conn('groundhouse1', 'groundplein', 4).
 cp_conn('groundhouse2', 'groundplein', 4).
 cp_conn('groundhouse3', 'groundplein', 5).
-cp_conn('groundhouse3', 'groundplein', 5).
 cp_conn('groundhouse4', 'groundplein', 4).
 cp_conn('groundplein', 'elbow', 16).
 cp_conn('groundplein', 'forestlawnjunction', 10).
