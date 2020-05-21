@@ -77,7 +77,8 @@ move_people(State, UserState, CallBack) :-
     maplist(validate_a_movement(State), NewState),
     exclude(not_colliding(NewState), NewState, Colliding),
     (   Colliding \= []
-    ->  throw(error(invalid_move(collision(Colliding, State))))
+    ->  vw_clear_all,
+        throw(error(invalid_move(collision(Colliding, State))))
     ;   true
     ),
     partition(at_goal, NewState, AtGoal, NS1),
@@ -141,6 +142,7 @@ validate_a_movement(State, pass(UUID, NLoc, _)) :-
     ;   down(Loc, NLoc)
     ).
 validate_a_movement(State, Pass) :-
+    vw_clear_all,
     throw(error(invalid_move(moved_too_far(Pass, State)))).
 
 not_colliding(NS, pass(UUID, Loc, _)) :-
