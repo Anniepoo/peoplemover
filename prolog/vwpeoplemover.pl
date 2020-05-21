@@ -47,7 +47,7 @@
 %    meters every cycle of the system (if they move at all). Offset is
 %    the number of cycles travelled since the passenger entered this
 %    link. So a passenger at `loc(groundplein, 2, elbow)` will be 20
-%    meters in the direction of the control point *elbow* from the
+%    meters along the Zurgon beam to control point *elbow* from the
 %    control point *groundplein*.
 %
 %    Passengers move along these links. A passengers location is
@@ -161,6 +161,12 @@ up(loc(CP, Offset, Towards), loc(Towards, 0, NT)) :-
     Len is Offset + 1,
     cp_conn(Towards, NT, _).
 
+%!  down(+Loc:location, -Next:location) is nondet
+%
+%   @arg Loc a term representing a location in the system (see
+%   `move_people/2`)
+%   @arg Next one move downwards on any route from this location
+%
 down(loc(CP, Offset, Towards), loc(CP, NO, Towards)) :-
     succ(NO, Offset).
 down(loc(CP, 0, _), loc(NCP, NO, CP)) :-
@@ -180,7 +186,8 @@ at_goal(pass(_, loc(CP, 0, _), CP)).   % stubs ??
 %   location of control points in region coordinates
 %
 %   @arg CP a control point
-%   @arg Loc a loc dict, the position of a pass at this control point
+%   @arg Loc a loc dict, the position of a passenger at this control
+%   point
 %
 cp_loc('groundplein', loc{x: 116, y:134, z:28.78035}).
 cp_loc('groundhouse1', loc{x: 154, y:131, z:28.78035}).
