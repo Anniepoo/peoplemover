@@ -73,12 +73,20 @@ move_people(CallBack, UserState) :-
     move_people([], UserState, CallBack).
 
 move_people(State, UserState, CallBack) :-
-    call(CallBack, State, UserState, NewState, NewUserState),
+    catch(
+        call(CallBack, State, UserState, NewState, NewUserState),
+        Error,
+        vw_throw(Error)),
+    !,
+    % passengers must not be created or destroyed by user
+    (   length(State, Len),
+        length(NewState, Len)
+    ;   vw_throw(error(invalid_move(object_constancy(State, NewState))))
+    ),
     maplist(validate_a_movement(State), NewState),
     exclude(not_colliding(NewState), NewState, Colliding),
     (   Colliding \= []
-    ->  vw_clear_all,
-        throw(error(invalid_move(collision(Colliding, State))))
+    ->  vw_throw(error(invalid_move(collision(Colliding, State))))
     ;   true
     ),
     partition(at_goal, NewState, AtGoal, NS1),
@@ -90,19 +98,6 @@ move_people(State, UserState, CallBack) :-
     vw_moveall(PassToMove),
     sleep(2.0),
     move_people(NS2, NewUserState, CallBack).
-
-:- multifile prolog:message//1.
-
-prolog:message(error(invalid_move(collision(Colliding, State)))) -->
-                [ 'You have collisions.', nl ],
-                collision_msg(Colliding),
-                ['complete state is ~w'-[State], nl].
-
-collision_msg([]) --> [].
-collision_msg([H|T]) -->
-    ['~w'-[H], nl],
-    collision_msg(T).
-
 
 stationary(OldLocs, pass(UUID, Loc, _)) :-
     member(pass(UUID, Loc, _), OldLocs).
@@ -142,8 +137,7 @@ validate_a_movement(State, pass(UUID, NLoc, _)) :-
     ;   down(Loc, NLoc)
     ).
 validate_a_movement(State, Pass) :-
-    vw_clear_all,
-    throw(error(invalid_move(moved_too_far(Pass, State)))).
+    vw_throw(error(invalid_move(moved_too_far(Pass, State)))).
 
 not_colliding(NS, pass(UUID, Loc, _)) :-
     findall(Other, member(pass(Other, Loc, _), NS), [UUID]).
@@ -305,6 +299,10 @@ vw_clear_all :-
     capability(URL),
     http_post(URL, atom(clear), _, []).
 
+vw_throw(Term) :-
+    vw_clear_all,
+    throw(Term).
+
 vw_clear(UUID) :-
     capability(URL),
     format(codes(Content), 'd, ~w', [UUID]),
@@ -331,5 +329,66 @@ a_move_arg(pass(UUID, Loc, _)) -->
     {loc_region_loc(Loc, RegionLoc),
      format(codes(Codes), ', ~w, <~1f,~1f,~1f>', [UUID, RegionLoc.x, RegionLoc.y, RegionLoc.z])},
      Codes.
+
+		 /*******************************
+		 *           Error reporting    *
+		 *******************************/
+
+
+:- multifile prolog:message//1.
+
+prolog:message(error(invalid_move(collision(Colliding, State)))) -->
+                [ 'You have collisions.', nl ],
+                collision_msg(Colliding),
+                ['complete state is ~w'-[State], nl].
+
+
+prolog:message(error(invalid_move(object_constancy(State, NewState)))) -->
+    { length(State, LS),
+      length(NewState, LNS),
+      LNS > LS
+    },
+    [ 'You made up a passenger!', nl],
+    dup_passenger(NewState, State).
+prolog:message(error(invalid_move(object_constancy(State, NewState)))) -->
+    { length(State, LS),
+      length(NewState, LNS),
+      LNS < LS
+    },
+    [ 'Please don\'t delete the passengers!', nl],
+    missing_passenger(State, NewState).
+prolog:message(error(invalid_move(object_constancy(State, NewState)))) -->
+    [ 'Baffled!', nl,
+    'I handed you ~q'-[State], nl,
+    'You handed me ~q'-[NewState], nl],
+    dup_passenger(NewState, State).
+
+
+missing_passenger([], _) --> [].
+missing_passenger([pass(UUID, _, _) | T], NewState) -->
+    { member(pass(UUID, _, _), NewState) },
+    missing_passenger(T, NewState).
+missing_passenger([pass(UUID, Loc, Goal) | T], NewState) -->
+    { \+ member(pass(UUID, _, _), NewState) },
+    [ 'What happened to passenger ~w who was at ~q going to ~w?'-[UUID, Loc, Goal],
+      nl],
+    missing_passenger(T, NewState).
+
+
+dup_passenger([], _) --> [].
+dup_passenger([pass(UUID, loc(_CP, _Off, _Target), _Goal) | T], State) -->
+    { member(pass(UUID, _, _), State) },
+    dup_passenger(T, State).
+dup_passenger([pass(UUID, loc(CP, Off, Target), Goal) | T], State) -->
+    { \+ member(pass(UUID, _, _), State) },
+    [ 'Passenger ~w at loc(~w,~w,~w) going to ~w'-[UUID, CP, Off, Target, Goal],
+      nl],
+    dup_passenger(T, State).
+
+
+collision_msg([]) --> [].
+collision_msg([H|T]) -->
+    ['~w'-[H], nl],
+    collision_msg(T).
 
 
