@@ -123,9 +123,9 @@ make_up_people(Current, Models) :-
     maplist(make_up_one, Locs, Models).
 
 make_up_one(Start, pass_model(Type, Start, Goal)) :-
-    Type = random_member(Type, [clanker, bureaucratbot, biomorph, tentacles]),
+    random_member(Type, [clanker, bureaucratbot, biomorph, tentacles]),
     setof(Loc, cp_conn(Loc, _, _), Locs),
-    Goal = random_member(Goal, Locs).
+    random_member(Goal, Locs).
 
 occupied(Current, CP) :-
     member(pass(_, loc(CP, _, _), _), Current).
