@@ -175,19 +175,17 @@ down(loc(CP, 0, _), loc(NCP, NO, CP)) :-
 
 at_goal(pass(_, loc(CP, 0, _), CP)).   % stubs ??
 
-
-
 		 /*******************************
 		 *   Define tracks              *
 		 *******************************/
 
 %!  cp_loc(-CP:atom, -Loc:dict) is nondet
 %
-%   location of control points in region coordinates
-%
 %   @arg CP a control point
 %   @arg Loc a loc dict, the position of a passenger at this control
 %   point
+%
+%   location of control points in region coordinates
 %
 cp_loc('groundplein', loc{x: 116, y:134, z:28.78035}).
 cp_loc('groundhouse1', loc{x: 154, y:131, z:28.78035}).
@@ -222,7 +220,8 @@ cp_loc('interstellar', loc{x: 119, y:78.26033, z:329.446259}).
 %   @arg Target   control point atom, other end of arc
 %   @arg Dist     integer number of cycles to get to Target
 %
-
+%  Define which CPs the Zurgon beams connect
+%
 cp_conn('groundhouse1', 'groundplein', 4).
 cp_conn('groundhouse2', 'groundplein', 4).
 cp_conn('groundhouse3', 'groundplein', 5).
@@ -251,6 +250,13 @@ cp_conn('trunk6', 'upperbubble', 3).
 cp_conn('upperbubble', 'uphigh', 8).
 cp_conn('interstellar', 'trunk3', 1).
 
+%!  loc_region_loc(+Loc:location, -RegionLoc:dict) is det
+%
+%   @arg Loc a term of form `loc(CP, Offset, Towards)`
+%   @arg RegionLoc a dict of form loc{x:X, y:Y, z:Z}
+%
+%   Succeeds when RegionLoc is the region coordinates of Loc
+%
 loc_region_loc(loc(CP, Offset, Towards), loc{x:X, y:Y, z:Z}) :-
     cp_loc(CP, loc{x:CPX, y:CPY, z:CPZ}),
     cp_loc(Towards, loc{x:TX, y:TY, z:TZ}),
