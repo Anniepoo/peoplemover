@@ -2,6 +2,7 @@
               set_capability/1,
               move_people/2,
               cp_conn/3,
+              cp_loc/2,
               up/2,
               down/2,
               loc_region_loc/2
@@ -69,8 +70,8 @@
 :- meta_predicate move_people(4, +), move_people(+, +, 2).
 
 move_people(CallBack, UserState) :-
-    vw_clear_all,
-    move_people([], UserState, CallBack).
+    once(vw_clear_all),
+    once(move_people([], UserState, CallBack)).
 
 move_people(State, UserState, CallBack) :-
     catch(
@@ -83,20 +84,29 @@ move_people(State, UserState, CallBack) :-
         length(NewState, Len)
     ;   vw_throw(error(invalid_move(object_constancy(State, NewState))))
     ),
+    % passengers must move 0 or 1 space
     maplist(validate_a_movement(State), NewState),
+    %passengers must not end up in same place
     exclude(not_colliding(NewState), NewState, Colliding),
     (   Colliding \= []
     ->  vw_throw(error(invalid_move(collision(Colliding, State))))
     ;   true
     ),
+    % passengers must not pass each other in opposite directions on segment
+    no_passing(State, State, NewState),
     partition(at_goal, NewState, AtGoal, NS1),
     maplist(do_delete_pass, AtGoal),
     make_up_people(NS1, NewFolkModel),
+    !,
     maplist(pass_create, NewFolkModel, NewFolks),
     append(NS1, NewFolks, NS2),
     exclude(stationary(State), NS1, PassToMove),
+    !,
+    debug(vw(move_people), 'I will move ~w', [PassToMove]),
     vw_moveall(PassToMove),
+    !,
     sleep(2.0),
+    !,
     move_people(NS2, NewUserState, CallBack).
 
 stationary(OldLocs, pass(UUID, Loc, _)) :-
@@ -106,10 +116,16 @@ pass_create(pass_model(Type, Start, Goal), pass(UUID, loc(Start, 0, Face), Goal)
     cp_conn(Start, Face, _),
     cp_loc(Start, RegionLoc),
     vw_make_pass(Type, RegionLoc, UUID).
+pass_create(_Model, _Pass) :-
+    gtrace.
 
 do_delete_pass(pass(UUID, _, _)) :-
     vw_clear(UUID).
 
+make_up_people(Current, []) :-
+    length(Current, CurrLen),
+    CurrLen > 5,
+    !.
 make_up_people(Current, Models) :-
     findall(S, cp_conn(S, _, _), Locations),
     exclude(occupied(Current), Locations, EmptyLocs),
@@ -141,6 +157,16 @@ validate_a_movement(State, Pass) :-
 
 not_colliding(NS, pass(UUID, Loc, _)) :-
     findall(Other, member(pass(Other, Loc, _), NS), [UUID]).
+
+no_passing([], _, _).
+no_passing([pass(UUID, Loc, _)|_], State, NewState) :-
+    member(pass(UUID, NewLoc, _), NewState),
+    member(pass(OopsUUID, NewLoc, _), State),
+    member(pass(OopsUUID, Loc, _), NewState),
+    OopsUUID \= UUID, % stationary
+    vw_throw(error(invalid_move(pass(UUID, OopsUUID, Loc, NewLoc), State, NewState))).
+no_passing([_|T], State, NewState) :-
+    no_passing(T, State, NewState).
 
 %!  up(+Loc:location, -Next:location) is nondet
 %
@@ -225,7 +251,6 @@ cp_conn('groundhouse4', 'groundplein', 4).
 cp_conn('groundplein', 'elbow', 16).
 cp_conn('groundplein', 'forestlawnjunction', 10).
 cp_conn('forestlawn2', 'trunk1', 16).
-cp_conn('forestlawn3', 'trunk1', 27).
 cp_conn('forestlawn4', 'forestlawnjunction', 8).
 cp_conn('forestlawn5', 'forestlawnjunction', 3).
 cp_conn('forestlawn6', 'forestlawnjunction', 4).
@@ -264,6 +289,16 @@ loc_region_loc(loc(CP, Offset, Towards), loc{x:X, y:Y, z:Z}) :-
     Z is CPZ + Offset * 10.0 * (TZ-CPZ)/D.
 
 
+validate_track :-
+    cp_conn(S, E, _),
+    (   cp_loc(S, _),
+        cp_loc(E, _)
+    ->  true
+    ;   format('Invalid connection ~w to ~w~n', [S, E])
+    ),
+    fail.
+validate_track.
+
 
 		 /*******************************
 		 *    Virtual World Interface   *
@@ -289,30 +324,52 @@ set_capability(Capability) :-
     asserta(capability(FixedCapability)).
 
 vw_make_pass(Type, Loc, UUID) :-
+    sleep(1.1),
     capability(URL),
     format(codes(Content), 'rez, ~w, <~1f,~1f,~1f>', [
                                Type,
                                Loc.x, Loc.y, Loc.z]),
-    http_post(URL, codes(Content), UUID, []).
+    http_post(URL, codes(Content), UUID, [status_code(Status), header('Retry-After', AtomValue)]),
+    debug(vw(vw_make_pass), 'make_pass status=~w Retry-After=~w', [Status, AtomValue]).
+vw_make_pass(Type, Loc, UUID) :-
+    sleep(10.0),
+    debug(vw(vw_make_pass), 'retry ~w ~w', [Type, Loc]),
+    vw_make_pass(Type, Loc, UUID).
 
 vw_clear_all :-
+    sleep(1.1),
     capability(URL),
     http_post(URL, atom(clear), _, []).
+vw_clear_all :-
+    sleep(10.0),
+    debug(vw(clearall), 'retry clearall', []),
+    vw_clear_all.
 
 vw_throw(Term) :-
     vw_clear_all,
     throw(Term).
 
 vw_clear(UUID) :-
+    sleep(1.1),
     capability(URL),
     format(codes(Content), 'd, ~w', [UUID]),
-    http_post(URL, codes(Content), _, []).
+    http_post(URL, codes(Content), _, [status_code(Status), header('Retry-After', AtomValue)]),
+    debug(vw(vw_clear), 'clear UUID = ~w status=~w Retry-After=~w', [UUID, Status, AtomValue]).
+vw_clear(UUID) :-
+    sleep(10.0),
+    debug(vw(clear), 'retry clear ~w', [UUID]),
+    vw_clear(UUID).
 
 vw_moveall([]).
 vw_moveall([H|T]) :-
+    sleep(2.1),
     phrase(move_lang([H|T]), MoveStrCodes),
     capability(URL),
-    http_post(URL, codes(MoveStrCodes), _, []).
+    http_post(URL, codes(MoveStrCodes), _, [status_code(Status), header('Retry-After', AtomValue)]),
+    debug(vw(vw_moveall), 'moveall status=~w Retry-After=~w ~s', [Status, AtomValue, MoveStrCodes]).
+vw_moveall(X) :-
+    sleep(10.0),
+    vw_moveall(X).
 
 move_lang(List) -->
     `m`,
@@ -342,6 +399,11 @@ prolog:message(error(invalid_move(collision(Colliding, State)))) -->
                 collision_msg(Colliding),
                 ['complete state is ~w'-[State], nl].
 
+prolog:message(error(invalid_move(pass(UUID, OopsUUID, Loc, NewLoc), State, NewState))) -->
+    [ '~w and ~w attempted to pass in opposite directions on single beam in segment ~w - ~w'-
+      [UUID, OopsUUID, Loc, NewLoc], nl,
+      'complete old state is ~q'-[State], nl,
+      'complete new state is ~q'-[NewState]].
 
 prolog:message(error(invalid_move(object_constancy(State, NewState)))) -->
     { length(State, LS),
